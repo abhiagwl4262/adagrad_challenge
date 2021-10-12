@@ -98,7 +98,7 @@ def run(args):
     model = ReductionResnet(backbone).to(device)
     model.eval()
     outputs = []
-    data_dir = "../Challenge_images/train/0/"
+    data_dir = "../Challenge_images/"
     img_paths = os.listdir(data_dir)
     img_paths.sort(key = lambda x:x.split(".")[0].zfill(2))
     img_paths = [os.path.join(data_dir,path) for path in img_paths]
