@@ -101,7 +101,7 @@ def get_scores(tensors):
     #         scores[i][j] = F.cosine_similarity(tensors[i].unsqueeze(0), tensors[j].unsqueeze(0)).detach().cpu().numpy()
     print(scores)
     matches[np.where(scores>0.75)] = 1
-    np.save("matches.npy", matches)
+    np.save("scores.npy", scores)
 
 tensors = run()
 get_scores(tensors)
