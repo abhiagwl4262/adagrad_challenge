@@ -7,6 +7,7 @@ Then based on the threshold 0.75, I will categorise if the images matched or not
 Running this will write the final matching matrix, which has result of matching
 between ith image to jth image
 """
+import time
 import os
 import numpy as np
 import torch
@@ -14,18 +15,22 @@ import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image
 from resnet import resnet18
-
-torch.ops.load_library(
-    "pytorch_custom_op/build/lib.linux-x86_64-3.6/reduction.cpython-36m-x86_64-linux-gnu.so")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
 
 def reduction(features):
     """Implement Reduction with torch.repeat_interleave
     function
     """
-    feat1 = torch.repeat_interleave(features[0].cpu(), torch.Tensor([8]).long())
-    feat2 = torch.repeat_interleave(features[1].cpu(), torch.Tensor([4]).long())
-    feat3 = torch.repeat_interleave(features[2].cpu(), torch.Tensor([2]).long())
-    return (feat1+feat2+feat3+features[-1].cpu())/4.0
+    feat1 = torch.repeat_interleave(features[0], torch.Tensor([8]).to(device).long())
+    feat2 = torch.repeat_interleave(features[1], torch.Tensor([4]).to(device).long())
+    feat3 = torch.repeat_interleave(features[2], torch.Tensor([2]).to(device).long())
+    
+    out = (feat1+feat2+feat3+features[-1])/4.0
+
+    return out
 
 class ReductionResnet(torch.nn.Module):
     """this is implementation of reductionresnet.
@@ -44,9 +49,11 @@ class ReductionResnet(torch.nn.Module):
         avgpool2 = F.adaptive_avg_pool2d(features[1], (1, 1)).squeeze(-1).squeeze(-1).squeeze(0)
         avgpool3 = F.adaptive_avg_pool2d(features[2], (1, 1)).squeeze(-1).squeeze(-1).squeeze(0)
         avgpool4 = F.adaptive_avg_pool2d(features[3], (1, 1)).squeeze(-1).squeeze(-1).squeeze(0)
-        output = torch.ops.adagradChallenge.reduction(avgpool1.to("cpu"),avgpool2.to("cpu"),avgpool3.to("cpu"),avgpool4.to("cpu"))
-        # output2 = reduction((avgpool1,avgpool2,avgpool3,avgpool4))
-
+        #output = reduction((avgpool1.to("cpu"),avgpool2.to("cpu"),avgpool3.to("cpu"),avgpool4.to("cpu")))
+        begin = time.time()
+        output = reduction((avgpool1,avgpool2,avgpool3,avgpool4))
+        end = time.time()
+        print("time taken to process python GPU reduction is ", (end-begin))
         return output.unsqueeze(0)
 
 def run():
@@ -55,7 +62,7 @@ def run():
     returns concated output of all the images
     """
     backbone = resnet18(pretrained=True)
-    model = ReductionResnet(backbone).to("cuda:0")
+    model = ReductionResnet(backbone).to(device)
     model.eval()
     outputs = []
     data_dir = "../Challenge_images/train/0/"
@@ -68,12 +75,13 @@ def run():
         except:
             print("There is some issue with ", img_path)
             continue
-        img = img.to("cuda:0")
+        img = img.to(device)
         output = model(img)
         if not len(outputs):
             outputs.append(output)
         else:
             outputs[0] = torch.cat((outputs[0], output), dim=0)
+        
     return outputs[0]
 
 def get_scores(tensors):
@@ -87,10 +95,10 @@ def get_scores(tensors):
     scores = np.zeros((num_tensors, num_tensors))
     matches = np.zeros((num_tensors, num_tensors))
     for i in range(num_tensors):
-        scores[i,:] = F.cosine_similarity(tensors[i].unsqueeze(0).repeat(num_tensors, 1), tensors).detach().numpy()
+        scores[i,:] = F.cosine_similarity(tensors[i].unsqueeze(0).repeat(num_tensors, 1), tensors).detach().cpu().numpy()
     # for i in range(num_tensors):
     #     for j in range(num_tensors):
-    #         scores[i][j] = F.cosine_similarity(tensors[i].unsqueeze(0), tensors[j].unsqueeze(0)).detach().numpy()
+    #         scores[i][j] = F.cosine_similarity(tensors[i].unsqueeze(0), tensors[j].unsqueeze(0)).detach().cpu().numpy()
     print(scores)
     matches[np.where(scores>0.75)] = 1
     np.save("matches.npy", matches)
