@@ -53,7 +53,7 @@ def export_custom_op():
     layer_4 = torch.randn(512)
     inputs = (layer_1, layer_2, layer_3, layer_4)
 
-    onnx_save_path = '../models/reduction.onnx'
+    onnx_save_path = '../../models/reduction.onnx'
     torch.onnx.export(CustomModel(), inputs, onnx_save_path,
                       opset_version=9,
                       example_outputs=None,
